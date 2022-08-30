@@ -1,0 +1,15 @@
+# YoutubeDownloader
+
+STEP 1: python -m venv venv
+STEP 2: venv\scripts\activate
+STEP 3: pip install -r requirements.txt
+STEP 4: Install ffmpeg: <https://www.youtube.com/watch?v=r1AtmY-RMyQ>
+
+How to use:
+If you need audio clip (MP3) use "-a":
+STEP: python .\youtubeDL.py -p [Path to destination] -a [A link to youtube video] -a [Another link to youtube video]
+
+If you need video clip (MP4) use "-v":
+STEP: python .\youtubeDL.py -p [Path to destination] -v [A link to youtube video] -v [Another link to youtube video]
+
+Feel free to mix and match these options
