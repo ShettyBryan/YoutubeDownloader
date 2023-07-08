@@ -3,3 +3,4 @@
 logs/
 youtubeDL.spec
 build/
+__pycache__/
