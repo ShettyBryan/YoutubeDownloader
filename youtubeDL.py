@@ -1,58 +1,107 @@
-import re
+import subprocess
 from pytube import YouTube
-from moviepy.editor import*
 import click
 import os
 
+from utils.files.filemanager import FileManager
+from utils.logger.log import createLogger
+from utils.errors.error import ErrorCodes
+from utils.errors.error import exitHandler
+
+
+# Argument data
+pathArg = {
+    'Long': '--path',
+    'Short': '-p',
+    'Help': 'Path to videos in windows',
+    'Required': True
+}
+
+vidArg = {
+    'Long': '--videoLink',
+    'Short': '-v',
+    'Help': 'Link to videos on youtube in mp4 format',
+    'Required': False,
+    'Multiple': True
+}
+
+audArg = {
+    'Long': '--audioLink',
+    'Short': '-a',
+    'Help': 'Link to videos on youtube in mp3 format',
+    'Required': False,
+    'Multiple': True
+}
+
 
 @click.command()
-@click.option('--path', '-p', help='Path to videos in windows', required=True)
-@click.option('--videolink', '-v', help='Link to videos on youtube in mp4 format', multiple=True)
-@click.option('--audiolink', '-a', help='Link to videos on youtube in mp3 format', multiple=True)
-def download(path, videolink, audiolink):
-    videoClips = []
-    audioClips = []
+@click.option('--path',
+              '-p',
+              help=pathArg['Help'],
+              required=pathArg['Required']
+              )
+@click.option('--videolink',
+              '-v',
+              help=vidArg['Help'],
+              multiple=vidArg['Multiple']
+              )
+@click.option('--audiolink',
+              '-a',
+              help=audArg['Help'],
+              multiple=audArg['Multiple']
+              )
+def main(path, videolink, audiolink):
 
-    VIDEO_CLIPS_DIR = os.path.join(path, 'videoClips')
-    AUDIO_CLIPS_DIR = os.path.join(path, 'audioClips')
-    
-    if not os.path.exists(VIDEO_CLIPS_DIR):
-        os.makedirs(VIDEO_CLIPS_DIR)
-    
-    if not os.path.exists(AUDIO_CLIPS_DIR):
-        os.makedirs(AUDIO_CLIPS_DIR)
+    log = createLogger(__name__,
+                       os.path.join(os.getcwd(), 'logs'),
+                       'youtubeDL.log'
+                       )
 
-    for link in videolink:
-        videoClips.append(YouTube(link))
-    
-    for link in audiolink:
-        audioClips.append(YouTube(link))
+    log.info('Starting youtubeDL')
 
-    if videoClips:  
-        print(f'Downloading Video Clips to: {VIDEO_CLIPS_DIR}')
-        for ytVideo in videoClips:
-            yd = ytVideo.streams.get_highest_resolution()
-            yd.download(VIDEO_CLIPS_DIR)
-            print(f'Downloaded: {yd.default_filename}')
+    if not path:
+        exitHandler(ErrorCodes.emptyPath, log)
 
-    if audioClips:
-        print(f'Downloading Audio Clips to: {AUDIO_CLIPS_DIR}')
-        for ytVideo in audioClips:
+    if not videolink and not audiolink:
+        exitHandler(ErrorCodes.noAudioOrVideoLinks, log)
 
-            videoTitle = ytVideo.title
-            videoTitle = re.sub("[^(\w+)]", '', videoTitle)
-            videoTitle = videoTitle + '.mp3'
-            print(videoTitle)
+    videoClipsDir = os.path.join(path, 'videoClips')
+    log.debug(f'videoClipsDir: {videoClipsDir}')
 
-            yd = ytVideo.streams.get_highest_resolution()
-            yd.download(AUDIO_CLIPS_DIR)
-            print(f'Downloaded: {yd.default_filename.replace(" ", "")}')
-            os.replace(os.path.join(AUDIO_CLIPS_DIR, yd.default_filename), os.path.join(AUDIO_CLIPS_DIR, yd.default_filename.replace(" ", "")))
-            print(f'Converting video clip to audio...')
+    audioClipsDir = os.path.join(path, 'audioClips')
+    log.debug(f'audioClipsDir: {audioClipsDir}')
 
-            cmd = 'ffmpeg -y -i {} -vn {}'.format(os.path.join(AUDIO_CLIPS_DIR, yd.default_filename.replace(" ", "")),os.path.join(AUDIO_CLIPS_DIR,videoTitle))
-            os.system(cmd)
-            os.remove(os.path.join(AUDIO_CLIPS_DIR, yd.default_filename.replace(" ", "")))
+    fileManager = FileManager(log)
+
+    fileManager.createFolder(videoClipsDir)
+    fileManager.createFolder(audioClipsDir)
+
+    videoLinksList = [YouTube(link) for link in videolink]
+    audioClipsList = [YouTube(link) for link in audiolink]
+
+    if videoLinksList:
+        log.debug(f'Downloading Video Clips to: {videoClipsDir}')
+        for link in videoLinksList:
+            youtubeStream = link.streams.get_highest_resolution()
+            log.info(f"Downloading {youtubeStream.default_filename}")
+            youtubeStream.download(videoClipsDir)
+
+    if audioClipsList:
+        log.debug(f'Downloading Audio Clips to: {audioClipsDir}')
+        for link in audioClipsList:
+            youtubeStream = link.streams.get_highest_resolution()
+            log.info(f"Downloading {youtubeStream.default_filename}")
+            downloadedAudioFilePath = youtubeStream.download(audioClipsDir)
+            cmd = f'ffmpeg -y -i {downloadedAudioFilePath} -vn {downloadedAudioFilePath}'
+            subprocess.call(cmd, stderr=subprocess.DEVNULL,
+                            stdout=subprocess.DEVNULL)
+
+            base, _ = os.path.splitext(downloadedAudioFilePath)
+            fileManager.renameFile(downloadedAudioFilePath, base + '.mp3')
+
+    log.info('Finished youtubeDL')
+    log.info(f'You can find the clips here: {path} ')
+
 
 if __name__ == '__main__':
-    download()
+    main()
